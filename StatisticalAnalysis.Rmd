@@ -1,0 +1,218 @@
+---
+title: "Statistical Analysis"
+output: pdf_document
+date: "2026-01-07"
+---
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(tidyverse)
+library(ggplot2)
+library(rstatix) 
+```
+
+
+# Exploratory Data Analysis
+
+## Data Preparation & Subgroups
+
+```{r}
+df <- read.csv("RelativeErrorTrueZero.csv", sep= ";")
+colnames(df)
+names(df)
+```
+
+```{r}
+df_long <- df %>%
+  pivot_longer(
+    cols = c(Map1, Map2, Map3, Map4),
+    names_to = "Map",
+    values_to = "RelativeError"
+  )
+
+
+df_long <- df_long %>%
+  mutate(Subgroup = paste(Maptype, Treatment, sep = "_"))
+```
+
+
+```{r}
+df_long$Subgroup <- factor(df_long$Subgroup,
+                           levels = c("Satellite_Pre", "Satellite_Post",
+                                      "Outline_Pre", "Outline_Post"))
+
+
+colors_map <- c(
+  "Satellite_Pre"  = "#ffbbee",
+  "Satellite_Post" = "#cc0999",
+  "Outline_Pre"    = "#99ffff",
+  "Outline_Post"   = "#00bbbb"
+)
+```
+
+
+## Relative Errors Data Distribution Overview
+
+```{r}
+ggplot(df_long, aes(x = RelativeError, fill = Subgroup)) +
+  geom_histogram(position = "identity", alpha = 0.8, bins = 40, color = "black") +
+  scale_fill_manual(values = colors_map) +
+  facet_wrap(~ Subgroup) +
+  labs(
+    title = "Histograms of Relative Errors per Subgroup",
+    x = "Relative Error",
+    y = "Count"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+ggplot(df_long, aes(x = Subgroup, y = RelativeError, fill = Subgroup)) +
+  geom_boxplot(alpha = 0.8, color = "black") +  # black outline
+  scale_fill_manual(values = colors_map) +
+  labs(
+    title = "Boxplots of Relative Errors per Subgroup",
+    x = "Subgroup",
+    y = "Relative Error"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+## Means of Relative Errors Data Distribution Overview
+
+
+```{r}
+ggplot(df, aes(x = Mean, fill = Subgroup)) +
+  geom_histogram(position = "identity", alpha = 0.8, bins = 35, color = "black") +
+  scale_fill_manual(values = colors_map) +
+  facet_wrap(~ Subgroup) +
+  labs(
+    title = "Histograms of Means of Relative Errors per Subgroup",
+    x = "Relative Error",
+    y = "Count"
+  ) +
+  theme_minimal()
+```
+
+
+```{r}
+ggplot(df, aes(x = Subgroup, y = Mean, fill = Subgroup)) +
+  geom_boxplot(alpha = 0.8, color = "black") +
+  scale_fill_manual(values = colors_map) +
+  labs(
+    title = "Boxplots of Mean Relative Errors by Subgroup",
+    x = "Subgroup",
+    y = "Mean Relative Error"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+
+# Hypothesis testing preparation
+
+```{r}
+# New df with Pre and Post in one table for paired tests
+df_wide <- df %>%
+  select(ParticipantID, Maptype, Treatment, Mean) %>%
+  pivot_wider(
+    names_from = Treatment,
+    values_from = Mean
+  )
+```
+
+```{r}
+df_sat <- df_wide %>% filter(Maptype == "Satellite")
+df_out <- df_wide %>% filter(Maptype == "Outline")
+```
+
+
+```{r}
+# Satellite normality
+shapiro.test(df_sat$Pre)
+shapiro.test(df_sat$Post)
+shapiro.test(df_sat$Post - df_sat$Pre)
+
+# Outline normality
+shapiro.test(df_out$Pre)
+shapiro.test(df_out$Post)
+shapiro.test(df_out$Post - df_out$Pre)
+```
+
+All p-values are except from post-treatment Outline, are <= 0.5, hence they are 
+not normally distributed. 
+
+
+## Hypothesis 1: 
+
+Hypothesis 1: The satellite maps have smaller means of relative estimation errors in comparison to outline maps. -> pre sat vs pre out & post sat vs post out 
+
+
+```{r}
+wilcox.test(df_sat$Pre, df_out$Pre, paired = FALSE, alternative = "less")
+
+wilcox.test(df_sat$Post, df_out$Post, paired = FALSE, alternative = "less")
+```
+
+
+
+## Hypothesis 2: 
+
+Hypothesis 2: With the provision of metric cues (post treatment), the means of relative estimation errors decrease, and the effect size is bigger for the outline map type. -> pre sat vs post sat & pre out vs post out (& effect size)
+
+```{r}
+wtest_sat <- wilcox.test(df_sat$Post, df_sat$Pre, paired = TRUE, alternative = "less")
+wtest_sat
+
+wtest_out <- wilcox.test(df_out$Post, df_out$Pre, paired = TRUE, alternative = "less")
+wtest_out
+```
+ The alternative hypothesis is that the median difference is not zero, indicating a significant difference exists. 
+
+```{r}
+# Satellite effect size
+
+n <- 11
+V <- 1
+
+mu_V <- n*(n+1)/4
+sd_V <- sqrt(n*(n+1)*(2*n+1)/24)
+
+Z <- (V - mu_V - 0.5) / sd_V
+
+r <- Z / sqrt(n)
+
+Z
+r
+```
+
+
+```{r}
+# Outline effect size
+
+n <- 10
+V <- 0
+
+mu_V <- n*(n+1)/4
+sd_V <- sqrt(n*(n+1)*(2*n+1)/24)
+
+Z <- (V - mu_V - 0.5) / sd_V
+
+r <- Z / sqrt(n)
+
+Z
+r
+```
+
+
+
+
+
+
+
+
+
+
